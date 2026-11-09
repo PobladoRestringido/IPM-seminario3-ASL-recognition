@@ -5,7 +5,6 @@ import numpy as np
 import time
 from config import config
 
-
 # Configuración de la tarea
 BaseOptions = mp.tasks.BaseOptions
 PoseLandmarker = mp.tasks.vision.PoseLandmarker
@@ -18,33 +17,35 @@ options = PoseLandmarkerOptions(
     num_poses=1
 )
 
-# L2 Norm entre la mano y el punto objetivo (azul) 
 def calculate_distance(point1, point2) -> float:
     distance = np.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
     return distance
 
-# Crea una nueva capa y una posición random para el objetivo
 def new_circle(padding) -> None:
-    global circle_layer, random_circle_position
-    circle_layer =  np.zeros((int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), 3), dtype=np.uint8)
-    random_circle_position = (np.random.randint(padding, circle_layer.shape[1]-padding), np.random.randint(padding, circle_layer.shape[0]-padding))
+    global random_circle_position
+    # We no longer need circle_layer. We just need the position.
+    # Note: Using hardcoded 640x480 for safety, but ideally use cap properties
+    random_circle_position = (np.random.randint(padding, 640-padding), np.random.randint(padding, 480-padding))
 
-# Inicializar landmarker
 with PoseLandmarker.create_from_options(options) as landmarker:
-    cap = cv2.VideoCapture(0)  # Abrir cámara
+    # CHANGE 1: Force V4L2, MJPG, and set resolution
+    cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
     fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps == 0:  # seguridad si la cámara no da fps
+    if fps == 0: 
         fps = 30
 
     mp_pose = mp.solutions.pose
-
     frame_ms = int(1000 / fps)
-
-    # Inicializar valores
     timestamp = start_time = end_time = sum_t = counter = final_counter = 0
 
-    blue_back = np.zeros((int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), 3), dtype=np.uint8)
-    blue_back[:] = (255, 0, 0)
+    # Warm up the camera to avoid black/truncated frames in WSL
+    for _ in range(10):
+        cap.read()
 
     new_circle(config.padding)
 
@@ -53,32 +54,26 @@ with PoseLandmarker.create_from_options(options) as landmarker:
         if not ret:
             break
 
-        # Voltear frame horizontalmente
         frame = cv2.flip(frame, 1)
 
-        # Dibuja el circulo random en el frame
-        cv2.circle(circle_layer, random_circle_position, 20, (255, 255, 255), -1)
-        h, w = circle_layer.shape[:2]
-        frame = np.where(circle_layer != 0, blue_back, frame)
+        # CHANGE 2: Draw circle directly on the frame instead of using np.where
+        cv2.circle(frame, random_circle_position, 20, (255, 0, 0), -1) # Blue circle
 
-        # Variables de tiempo
         t = end_time - start_time
         sum_t += t
         start_time = time.time()
 
-        # Convertir frame a formato MediaPipe
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+        # CHANGE 3: Convert BGR to RGB for MediaPipe
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
 
-        # Ejecutar detección
         result = landmarker.detect_for_video(mp_image, timestamp)
         timestamp += frame_ms
 
-        # Dibujar landmarks si los hay
         if result.pose_landmarks:
-            for person_landmarks in result.pose_landmarks:  # para mantener tu estructura
+            for person_landmarks in result.pose_landmarks:
                 h, w, _ = frame.shape
 
-                # Dibuja líneas entre los landmarks
                 for connection in mp_pose.POSE_CONNECTIONS:
                     start_idx, end_idx = connection
                     start = person_landmarks[start_idx]
@@ -86,18 +81,14 @@ with PoseLandmarker.create_from_options(options) as landmarker:
 
                     x1, y1 = int(start.x * w), int(start.y * h)
                     x2, y2 = int(end.x * w), int(end.y * h)
-
                     cv2.line(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
 
-                # Dibuja los puntos (landmarks)
                 for idx, landmark in enumerate(person_landmarks):
                     x, y = int(landmark.x * w), int(landmark.y * h)
                     cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
 
                 landmarks_points = [(landmark.x, landmark.y) for landmark in [person_landmarks[19], person_landmarks[20]]]
                 for landmark in landmarks_points:
-                    h, w, _ = frame.shape
-                    x, y = int(landmark[0] * w), int(landmark[1] * h)
                     if calculate_distance(landmark, (random_circle_position[0]/w, random_circle_position[1]/h)) < 0.05:
                         counter += 1
                         sum_t = 0
@@ -113,32 +104,27 @@ with PoseLandmarker.create_from_options(options) as landmarker:
 
         end_time = time.time()
 
-        # Mostrar tiempo restante de juego y puntos obtenidos
         cv2.putText(frame, f'Time: {config.game_time:.2f} - Points: {counter}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
         config.game_time -= t
         
         if config.game_time <= 0:
-            frame = np.zeros((int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), 3), dtype=np.uint8)
+            frame = np.zeros((480, 640, 3), dtype=np.uint8) # Simplified shape
             cv2.putText(frame, f'Score: {final_counter} points', (180, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             cv2.putText(frame, f'Press Enter to continue ...', (120, 160), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             cv2.putText(frame, f'Press ESC to exit', (180, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 128, 0), 2)
 
-            # Tecla Enter para jugar
             if cv2.waitKey(1) & 0xFF == 13:
                 config.game_time = 20
                 counter = 0
             
-            # Tecla ESC para salir
             if cv2.waitKey(1) & 0xFF == 27:
                 sys.exit(0)
         else:
             final_counter = counter
 
-        # Mostrar resultado
         cv2.imshow("Pose Landmarker", frame)
 
-        # Tecla ESC para salir
         if cv2.waitKey(1) & 0xFF == 27:
             sys.exit(0)
 
