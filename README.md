@@ -50,3 +50,10 @@ Para descargar los pesos de otros modelos como _Hand Landmarker_, _Face Landmark
 ```bash
 python app.py
 ```
+
+## Ejecución `modified_app.py`
+0. Si estás usando WSL, ejecuta primero en Powershell:
+``usbipd list``. Quédate con el `BUSID` de tu cámara.
+Después, ejecuta `usbipd bind --busid <BUSID>` y ` usbipd attach --wsl --busid <BUSID>`.
+1. Primero ejecuta `download_hand_model.py`
+1. Luego ejecuta `modified_app.py`.
