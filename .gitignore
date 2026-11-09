@@ -1,2 +1,2 @@
 *.task
-mp_env/
+mp_env/__pycache__
