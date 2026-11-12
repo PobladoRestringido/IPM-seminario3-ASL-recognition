@@ -126,6 +126,9 @@ def classify_hand(
             best_distance = distance
             best_label = label
 
+    if best_label is not None:
+        best_label = best_label.replace("_FLIPPED", "")
+
     return best_label, best_distance
 
 

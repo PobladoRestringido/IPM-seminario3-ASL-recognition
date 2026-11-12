@@ -24,16 +24,37 @@ for image_path in Path(INPUT_DIR).iterdir():
         str(image_path)
     )
 
-    # Save annotated image
+    # Save original annotated image
     out_img_path = Path(OUTPUT_IMG_DIR) / image_path.name
     cv2.imwrite(str(out_img_path), annotated_img)
 
-    # Save landmarks
+    # Save original landmarks
     out_lm_path = Path(OUTPUT_LM_DIR) / f"{image_path.stem}.npy"
-
     np.save(
         out_lm_path,
         np.array(landmarks_list, dtype=object),
+        allow_pickle=True
+    )
+
+    # ----- Flipped version -----
+
+    h, w = annotated_img.shape[:2]
+
+    flipped_img = cv2.flip(annotated_img, 1)
+
+    flipped_landmarks = []
+    for hand in landmarks_list:
+        hand_flipped = np.array(hand, copy=True)
+        hand_flipped[:, 0] = w - 1 - hand_flipped[:, 0]
+        flipped_landmarks.append(hand_flipped)
+
+    out_img_path = Path(OUTPUT_IMG_DIR) / f"{image_path.stem}_flipped{image_path.suffix}"
+    cv2.imwrite(str(out_img_path), flipped_img)
+
+    out_lm_path = Path(OUTPUT_LM_DIR) / f"{image_path.stem}_flipped.npy"
+    np.save(
+        out_lm_path,
+        np.array(flipped_landmarks, dtype=object),
         allow_pickle=True
     )
 
