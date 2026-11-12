@@ -150,6 +150,14 @@ available_letters = sorted(
 target_letter = random.choice(available_letters)
 correct_frames = 0
 
+guide_images = {}
+
+for letter in available_letters:
+    guide_path = Path("hand_guides") / f"{letter}_guide.png"
+
+    if guide_path.exists():
+        guide_images[letter] = cv2.imread(str(guide_path))
+
 with HandLandmarker.create_from_options(options) as landmarker:
 
     # --------------------------------------------------------
@@ -330,6 +338,39 @@ with HandLandmarker.create_from_options(options) as landmarker:
             (255, 255, 0),
             2,
         )
+
+        guide = guide_images.get(target_letter)
+
+        if guide is not None:
+
+            guide_height = 180
+
+            aspect_ratio = guide.shape[1] / guide.shape[0]
+
+            guide_width = int(
+                guide_height * aspect_ratio
+            )
+
+            guide_resized = cv2.resize(
+                guide,
+                (guide_width, guide_height)
+            )
+
+            y1 = 10
+            y2 = y1 + guide_height
+
+            x2 = w - 10
+            x1 = x2 - guide_width
+
+            frame[y1:y2, x1:x2] = guide_resized
+
+            cv2.rectangle(
+                frame,
+                (x1, y1),
+                (x2, y2),
+                (0, 255, 255),
+                2
+            )
 
         cv2.imshow("Sign Language Recognition", frame)
 
