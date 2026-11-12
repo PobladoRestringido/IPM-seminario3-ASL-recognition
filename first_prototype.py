@@ -1,10 +1,10 @@
 import sys
 from pathlib import Path
+import random
 
 import cv2
 import mediapipe as mp
 import numpy as np
-
 
 # ============================================================
 # MediaPipe setup
@@ -16,20 +16,19 @@ HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 
 options = HandLandmarkerOptions(
-    base_options=BaseOptions(
-        model_asset_path="models/hand_landmarker.task"
-    ),
+    base_options=BaseOptions(model_asset_path="models/hand_landmarker.task"),
     running_mode=VisionRunningMode.VIDEO,
     num_hands=1,
     min_hand_detection_confidence=0.5,
     min_hand_presence_confidence=0.5,
-    min_tracking_confidence=0.5
+    min_tracking_confidence=0.5,
 )
 
 
 # ============================================================
 # Landmark normalization
 # ============================================================
+
 
 def normalize_landmarks(landmarks):
     """
@@ -55,6 +54,7 @@ def normalize_landmarks(landmarks):
 # Load reference signs
 # ============================================================
 
+
 def load_reference_signs(folder="output/landmarks"):
     references = {}
 
@@ -67,24 +67,15 @@ def load_reference_signs(folder="output/landmarks"):
     for file in folder.glob("*.npy"):
 
         try:
-            data = np.load(
-                file,
-                allow_pickle=True
-            )
+            data = np.load(file, allow_pickle=True)
 
             if len(data) == 0:
                 continue
 
-            hand = np.asarray(
-                data[0],
-                dtype=np.float32
-            )
+            hand = np.asarray(data[0], dtype=np.float32)
 
             if hand.shape != (21, 3):
-                print(
-                    f"Skipping {file.name}: "
-                    f"unexpected shape {hand.shape}"
-                )
+                print(f"Skipping {file.name}: " f"unexpected shape {hand.shape}")
                 continue
 
             label = file.stem.upper()
@@ -94,9 +85,7 @@ def load_reference_signs(folder="output/landmarks"):
             print(f"Loaded sign: {label}")
 
         except Exception as e:
-            print(
-                f"Could not load {file.name}: {e}"
-            )
+            print(f"Could not load {file.name}: {e}")
 
     return references
 
@@ -105,22 +94,16 @@ def load_reference_signs(folder="output/landmarks"):
 # Classification
 # ============================================================
 
-def classify_hand(
-    current_landmarks,
-    references
-):
-    current = normalize_landmarks(
-        current_landmarks
-    )
+
+def classify_hand(current_landmarks, references):
+    current = normalize_landmarks(current_landmarks)
 
     best_label = None
     best_distance = float("inf")
 
     for label, reference in references.items():
 
-        distance = np.linalg.norm(
-            current - reference
-        )
+        distance = np.linalg.norm(current - reference)
 
         if distance < best_distance:
             best_distance = distance
@@ -140,13 +123,7 @@ def distance_to_similarity(distance):
     This is purely heuristic.
     """
 
-    similarity = max(
-        0,
-        min(
-            100,
-            int(100 - distance * 20)
-        )
-    )
+    similarity = max(0, min(100, int(100 - distance * 20)))
 
     return similarity
 
@@ -155,9 +132,7 @@ def distance_to_similarity(distance):
 # Main
 # ============================================================
 
-references = load_reference_signs(
-    "output/landmarks"
-)
+references = load_reference_signs("output/landmarks")
 
 if len(references) == 0:
     print("No signs loaded.")
@@ -168,45 +143,30 @@ print("Loaded signs:")
 print(list(references.keys()))
 print()
 
+available_letters = sorted(
+    {label.replace("_FLIPPED", "") for label in references.keys()}
+)
+
+target_letter = random.choice(available_letters)
+correct_frames = 0
+
 with HandLandmarker.create_from_options(options) as landmarker:
 
     # --------------------------------------------------------
     # WSL-friendly camera setup from your working project
     # --------------------------------------------------------
 
-    cap = cv2.VideoCapture(
-        0,
-        cv2.CAP_V4L2
-    )
+    cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
 
-    cap.set(
-        cv2.CAP_PROP_FOURCC,
-        cv2.VideoWriter_fourcc(
-            "M",
-            "J",
-            "P",
-            "G"
-        )
-    )
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc("M", "J", "P", "G"))
 
-    cap.set(
-        cv2.CAP_PROP_FRAME_WIDTH,
-        640
-    )
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 
-    cap.set(
-        cv2.CAP_PROP_FRAME_HEIGHT,
-        480
-    )
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    cap.set(
-        cv2.CAP_PROP_BUFFERSIZE,
-        1
-    )
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-    fps = cap.get(
-        cv2.CAP_PROP_FPS
-    )
+    fps = cap.get(cv2.CAP_PROP_FPS)
 
     if fps == 0:
         fps = 30
@@ -226,10 +186,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
         if not ret:
             break
 
-        frame = cv2.flip(
-            frame,
-            1
-        )
+        frame = cv2.flip(frame, 1)
 
         h, w, _ = frame.shape
 
@@ -237,20 +194,11 @@ with HandLandmarker.create_from_options(options) as landmarker:
         # MediaPipe detection
         # ----------------------------------------------------
 
-        frame_rgb = cv2.cvtColor(
-            frame,
-            cv2.COLOR_BGR2RGB
-        )
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        mp_image = mp.Image(
-            image_format=mp.ImageFormat.SRGB,
-            data=frame_rgb
-        )
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
 
-        result = landmarker.detect_for_video(
-            mp_image,
-            timestamp
-        )
+        result = landmarker.detect_for_video(mp_image, timestamp)
 
         timestamp += frame_ms
 
@@ -261,6 +209,8 @@ with HandLandmarker.create_from_options(options) as landmarker:
         # ----------------------------------------------------
         # Hand processing
         # ----------------------------------------------------
+
+        is_correct = False
 
         if result.hand_landmarks:
 
@@ -280,13 +230,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
                 x2 = int(end.x * w)
                 y2 = int(end.y * h)
 
-                cv2.line(
-                    frame,
-                    (x1, y1),
-                    (x2, y2),
-                    (255, 0, 0),
-                    2
-                )
+                cv2.line(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
 
             # Draw keypoints
             for lm in hand_landmarks:
@@ -294,30 +238,32 @@ with HandLandmarker.create_from_options(options) as landmarker:
                 x = int(lm.x * w)
                 y = int(lm.y * h)
 
-                cv2.circle(
-                    frame,
-                    (x, y),
-                    4,
-                    (0, 255, 0),
-                    -1
-                )
+                cv2.circle(frame, (x, y), 4, (0, 255, 0), -1)
 
             current_landmarks = np.array(
-                [
-                    [lm.x, lm.y, lm.z]
-                    for lm in hand_landmarks
-                ],
-                dtype=np.float32
+                [[lm.x, lm.y, lm.z] for lm in hand_landmarks], dtype=np.float32
             )
+
+            prediction, distance = classify_hand(current_landmarks, references)
+
+            similarity = distance_to_similarity(distance)
 
             prediction, distance = classify_hand(
                 current_landmarks,
                 references
             )
 
-            similarity = distance_to_similarity(
-                distance
-            )
+            is_correct = prediction == target_letter
+
+            if is_correct:
+                correct_frames += 1
+            else:
+                correct_frames = 0
+
+            # Require ~0.5 seconds of stable recognition
+            if correct_frames >= 15:
+                target_letter = random.choice(available_letters)
+                correct_frames = 0
 
         # ----------------------------------------------------
         # UI
@@ -330,43 +276,62 @@ with HandLandmarker.create_from_options(options) as landmarker:
             cv2.FONT_HERSHEY_SIMPLEX,
             0.8,
             (255, 255, 255),
-            2
+            2,
         )
 
         cv2.putText(
             frame,
-            f"Prediction: {prediction}",
+            f"Show: {target_letter}",
             (10, 80),
             cv2.FONT_HERSHEY_SIMPLEX,
             1.0,
-            (0, 255, 0),
+            (0, 165, 255),    # Orange
+            2
+        )
+
+        feedback = (
+            "Correct!"
+            if is_correct
+            else f"You are showing: {prediction}"
+        )
+
+        feedback_color = (
+            (0, 255, 0)
+            if is_correct
+            else (0, 0, 255)
+        )
+
+        cv2.putText(
+            frame,
+            feedback,
+            (10, 125),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.9,
+            feedback_color,
             2
         )
 
         cv2.putText(
             frame,
             f"Similarity: {similarity}%",
-            (10, 125),
+            (10, 170),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.9,
             (0, 255, 255),
-            2
+            2,
         )
 
         cv2.putText(
             frame,
             f"Distance: {distance:.3f}",
-            (10, 165),
+            (10, 210),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.8,
             (255, 255, 0),
-            2
+            2,
         )
 
-        cv2.imshow(
-            "Sign Language Recognition",
-            frame
-        )
+        cv2.imshow("Sign Language Recognition", frame)
 
         if cv2.waitKey(1) & 0xFF == 27:
             sys.exit(0)
