@@ -6,6 +6,13 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+WORD_BANK = [
+    "APPLE", "BRIDGE", "CANDLE", "DRAGON", "EMBER",
+    "FALCON", "GARDEN", "HOUSE", "ISLAND", "JUNGLE",
+    "KITE", "LEMON", "MOUSE", "NIGHT", "OCEAN",
+    "PIANO", "QUEEN", "RIVER", "STONE", "TIGER", "GINGER", "BIGGER", "DIGGER", "JEW", "NETANYAHU",
+]
+
 # ============================================================
 # MediaPipe setup
 # ============================================================
@@ -147,7 +154,18 @@ available_letters = sorted(
     {label.replace("_FLIPPED", "") for label in references.keys()}
 )
 
-target_letter = random.choice(available_letters)
+def pick_word():
+    # Keep only words whose letters are all recognizable
+    eligible = [w for w in WORD_BANK if all(c in available_letters for c in w)]
+    return random.choice(eligible) if eligible else None
+
+target_word = pick_word()
+if target_word is None:
+    print("No word in bank can be spelled with loaded signs.")
+    sys.exit(1)
+
+letter_index = 0          # which letter of target_word we're on
+target_letter = target_word[letter_index]
 correct_frames = 0
 
 guide_images = {}
@@ -270,7 +288,12 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
             # Require ~0.5 seconds of stable recognition
             if correct_frames >= 15:
-                target_letter = random.choice(available_letters)
+                letter_index += 1
+                if letter_index >= len(target_word):
+                    print(f"Word complete: {target_word}")
+                    target_word = pick_word()
+                    letter_index = 0
+                target_letter = target_word[letter_index]
                 correct_frames = 0
 
         # ----------------------------------------------------
@@ -287,15 +310,21 @@ with HandLandmarker.create_from_options(options) as landmarker:
             2,
         )
 
+        # Show the whole word with the current letter highlighted in brackets
+        spelled = list(target_word)
+        spelled[letter_index] = f"[{spelled[letter_index]}]"
+        word_display = "".join(spelled)
+
         cv2.putText(
             frame,
-            f"Show: {target_letter}",
+            f"Spell: {word_display}",
             (10, 80),
             cv2.FONT_HERSHEY_SIMPLEX,
             1.0,
-            (0, 165, 255),    # Orange
-            2
+            (0, 165, 255),   # orange, same as before
+            2,
         )
+        
 
         feedback = (
             "Correct!"
