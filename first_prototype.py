@@ -5,6 +5,8 @@ from vision import (
     create_landmarker,
 )
 
+from game import pick_word
+
 import sys
 from pathlib import Path
 import random
@@ -12,35 +14,6 @@ import random
 import cv2
 import mediapipe as mp
 import numpy as np
-
-WORD_BANK = [
-    "APPLE",
-    "BRIDGE",
-    "CANDLE",
-    "DRAGON",
-    "EMBER",
-    "FALCON",
-    "GARDEN",
-    "HOUSE",
-    "ISLAND",
-    "JUNGLE",
-    "KITE",
-    "LEMON",
-    "MOUSE",
-    "NIGHT",
-    "OCEAN",
-    "PIANO",
-    "QUEEN",
-    "RIVER",
-    "STONE",
-    "TIGER",
-    "GINGER",
-    "BIGGER",
-    "DIGGER",
-    "JEW",
-    "NETANYAHU",
-]
-
 
 # ============================================================
 # Landmark normalization
@@ -112,13 +85,7 @@ available_letters = sorted(
 )
 
 
-def pick_word():
-    # Keep only words whose letters are all recognizable
-    eligible = [w for w in WORD_BANK if all(c in available_letters for c in w)]
-    return random.choice(eligible) if eligible else None
-
-
-target_word = pick_word()
+target_word = pick_word(available_letters)
 if target_word is None:
     print("No word in bank can be spelled with loaded signs.")
     sys.exit(1)
@@ -282,7 +249,7 @@ with create_landmarker() as landmarker:
 
                     print(f"Word complete: {target_word}")
 
-                    target_word = pick_word()
+                    target_word = pick_word(available_letters)
                     letter_index = 0
                 target_letter = target_word[letter_index]
                 correct_frames = 0
