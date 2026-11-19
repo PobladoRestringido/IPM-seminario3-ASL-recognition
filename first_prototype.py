@@ -1,3 +1,5 @@
+from vision import distance_to_percentage, classify_hand, normalize_landmarks
+
 import sys
 from pathlib import Path
 import random
@@ -58,26 +60,6 @@ options = HandLandmarkerOptions(
 # ============================================================
 
 
-def normalize_landmarks(landmarks):
-    """
-    Normalizes landmarks so comparison is
-    less sensitive to position and scale.
-    """
-
-    landmarks = landmarks.copy()
-
-    # Wrist becomes origin
-    landmarks -= landmarks[0]
-
-    # Use middle MCP joint as scale reference
-    scale = np.linalg.norm(landmarks[9])
-
-    if scale > 1e-6:
-        landmarks /= scale
-
-    return landmarks
-
-
 # ============================================================
 # Load reference signs
 # ============================================================
@@ -121,39 +103,6 @@ def load_reference_signs(folder="output/landmarks"):
 # ============================================================
 # Classification
 # ============================================================
-
-
-def classify_hand(current_landmarks, references):
-    current = normalize_landmarks(current_landmarks)
-
-    best_label = None
-    best_distance = float("inf")
-
-    for label, reference in references.items():
-
-        distance = np.linalg.norm(current - reference)
-
-        if distance < best_distance:
-            best_distance = distance
-            best_label = label
-
-    if best_label is not None:
-        best_label = best_label.replace("_FLIPPED", "")
-
-    return best_label, best_distance
-
-
-def distance_to_similarity(distance):
-    """
-    Converts distance into an easy-to-read
-    percentage for display.
-
-    This is purely heuristic.
-    """
-
-    similarity = max(0, min(100, int(100 - distance * 20)))
-
-    return similarity
 
 
 # ============================================================
@@ -307,7 +256,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
             prediction, distance = classify_hand(current_landmarks, references)
 
-            similarity = distance_to_similarity(distance)
+            similarity = distance_to_percentage(distance)
 
             prediction, distance = classify_hand(current_landmarks, references)
 

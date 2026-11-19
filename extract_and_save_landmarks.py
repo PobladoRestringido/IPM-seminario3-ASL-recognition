@@ -2,7 +2,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from tools import extract_hand_landmarks
+from initial_landmark_extraction import extract_hand_landmarks
 
 INPUT_DIR = "hand_references"
 OUTPUT_IMG_DIR = "output/images"
