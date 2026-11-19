@@ -1,4 +1,9 @@
-from vision import distance_to_percentage, classify_hand, normalize_landmarks
+from vision import (
+    distance_to_percentage,
+    classify_hand,
+    normalize_landmarks,
+    create_landmarker,
+)
 
 import sys
 from pathlib import Path
@@ -35,24 +40,6 @@ WORD_BANK = [
     "JEW",
     "NETANYAHU",
 ]
-
-# ============================================================
-# MediaPipe setup
-# ============================================================
-
-BaseOptions = mp.tasks.BaseOptions
-HandLandmarker = mp.tasks.vision.HandLandmarker
-HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
-VisionRunningMode = mp.tasks.vision.RunningMode
-
-options = HandLandmarkerOptions(
-    base_options=BaseOptions(model_asset_path="models/hand_landmarker.task"),
-    running_mode=VisionRunningMode.VIDEO,
-    num_hands=1,
-    min_hand_detection_confidence=0.5,
-    min_hand_presence_confidence=0.5,
-    min_tracking_confidence=0.5,
-)
 
 
 # ============================================================
@@ -154,7 +141,7 @@ for letter in available_letters:
     if guide_path.exists():
         guide_images[letter] = cv2.imread(str(guide_path))
 
-with HandLandmarker.create_from_options(options) as landmarker:
+with create_landmarker() as landmarker:
 
     # --------------------------------------------------------
     # WSL-friendly camera setup from your working project
