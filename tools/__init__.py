@@ -1,1 +1,0 @@
-from .extract_landmarks import extract_hand_landmarks
