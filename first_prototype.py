@@ -7,10 +7,31 @@ import mediapipe as mp
 import numpy as np
 
 WORD_BANK = [
-    "APPLE", "BRIDGE", "CANDLE", "DRAGON", "EMBER",
-    "FALCON", "GARDEN", "HOUSE", "ISLAND", "JUNGLE",
-    "KITE", "LEMON", "MOUSE", "NIGHT", "OCEAN",
-    "PIANO", "QUEEN", "RIVER", "STONE", "TIGER", "GINGER", "BIGGER", "DIGGER", "JEW", "NETANYAHU",
+    "APPLE",
+    "BRIDGE",
+    "CANDLE",
+    "DRAGON",
+    "EMBER",
+    "FALCON",
+    "GARDEN",
+    "HOUSE",
+    "ISLAND",
+    "JUNGLE",
+    "KITE",
+    "LEMON",
+    "MOUSE",
+    "NIGHT",
+    "OCEAN",
+    "PIANO",
+    "QUEEN",
+    "RIVER",
+    "STONE",
+    "TIGER",
+    "GINGER",
+    "BIGGER",
+    "DIGGER",
+    "JEW",
+    "NETANYAHU",
 ]
 
 # ============================================================
@@ -154,19 +175,27 @@ available_letters = sorted(
     {label.replace("_FLIPPED", "") for label in references.keys()}
 )
 
+
 def pick_word():
     # Keep only words whose letters are all recognizable
     eligible = [w for w in WORD_BANK if all(c in available_letters for c in w)]
     return random.choice(eligible) if eligible else None
+
 
 target_word = pick_word()
 if target_word is None:
     print("No word in bank can be spelled with loaded signs.")
     sys.exit(1)
 
-letter_index = 0          # which letter of target_word we're on
+letter_index = 0  # which letter of target_word we're on
 target_letter = target_word[letter_index]
 correct_frames = 0
+celebration_timer = 0
+confetti = []
+completed_word = ""
+letter_feedback_timer = 0
+last_completed_index = -1
+gold_flash_timer = 0
 
 guide_images = {}
 
@@ -274,10 +303,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
             similarity = distance_to_similarity(distance)
 
-            prediction, distance = classify_hand(
-                current_landmarks,
-                references
-            )
+            prediction, distance = classify_hand(current_landmarks, references)
 
             is_correct = prediction == target_letter
 
@@ -288,9 +314,32 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
             # Require ~0.5 seconds of stable recognition
             if correct_frames >= 15:
+
+                letter_feedback_timer = 10
+                last_completed_index = letter_index
+                gold_flash_timer = 10
                 letter_index += 1
                 if letter_index >= len(target_word):
+                    completed_word = target_word
+                    celebration_timer = 45  # ~1.5 seconds
+
+                    for _ in range(250):
+                        confetti.append(
+                            [
+                                random.randint(0, w),
+                                random.randint(0, h),
+                                random.randint(-15, 15),
+                                random.randint(-25, -5),
+                                (
+                                    random.randint(0, 255),
+                                    random.randint(0, 255),
+                                    random.randint(0, 255),
+                                ),
+                            ]
+                        )
+
                     print(f"Word complete: {target_word}")
+
                     target_word = pick_word()
                     letter_index = 0
                 target_letter = target_word[letter_index]
@@ -299,6 +348,9 @@ with HandLandmarker.create_from_options(options) as landmarker:
         # ----------------------------------------------------
         # UI
         # ----------------------------------------------------
+
+        if gold_flash_timer > 0:
+            gold_flash_timer -= 1
 
         cv2.putText(
             frame,
@@ -311,41 +363,47 @@ with HandLandmarker.create_from_options(options) as landmarker:
         )
 
         # Show the whole word with the current letter highlighted in brackets
-        spelled = list(target_word)
-        spelled[letter_index] = f"[{spelled[letter_index]}]"
-        word_display = "".join(spelled)
+        x = 10
+        y = 80
+
+        for i, letter in enumerate(target_word):
+
+            if i == last_completed_index and gold_flash_timer > 0:
+                color = (0, 215, 255)   # gold
+                display = letter
+
+            elif i < letter_index:
+                color = (0, 255, 0)     # green
+                display = letter
+
+            elif i == letter_index:
+                color = (0, 165, 255)  # current = orange
+                display = f"[{letter}]"
+
+            else:
+                color = (180, 180, 180)  # future = grey
+                display = letter
+
+            cv2.putText(
+                frame,
+                display,
+                (x, y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.0,
+                color,
+                2,
+            )
+
+            text_size = cv2.getTextSize(display, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)[0]
+
+            x += text_size[0] + 5
+
+        feedback = "Correct!" if is_correct else f"You are showing: {prediction}"
+
+        feedback_color = (0, 255, 0) if is_correct else (0, 0, 255)
 
         cv2.putText(
-            frame,
-            f"Spell: {word_display}",
-            (10, 80),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            (0, 165, 255),   # orange, same as before
-            2,
-        )
-        
-
-        feedback = (
-            "Correct!"
-            if is_correct
-            else f"You are showing: {prediction}"
-        )
-
-        feedback_color = (
-            (0, 255, 0)
-            if is_correct
-            else (0, 0, 255)
-        )
-
-        cv2.putText(
-            frame,
-            feedback,
-            (10, 125),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.9,
-            feedback_color,
-            2
+            frame, feedback, (10, 125), cv2.FONT_HERSHEY_SIMPLEX, 0.9, feedback_color, 2
         )
 
         cv2.putText(
@@ -376,14 +434,9 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
             aspect_ratio = guide.shape[1] / guide.shape[0]
 
-            guide_width = int(
-                guide_height * aspect_ratio
-            )
+            guide_width = int(guide_height * aspect_ratio)
 
-            guide_resized = cv2.resize(
-                guide,
-                (guide_width, guide_height)
-            )
+            guide_resized = cv2.resize(guide, (guide_width, guide_height))
 
             y1 = 10
             y2 = y1 + guide_height
@@ -393,14 +446,133 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
             frame[y1:y2, x1:x2] = guide_resized
 
-            cv2.rectangle(
-                frame,
-                (x1, y1),
-                (x2, y2),
-                (0, 255, 255),
-                2
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
+
+        # =====================================================
+        # EXTREME SUCCESS CELEBRATION
+        # =====================================================
+
+        if celebration_timer > 0:
+
+            celebration_timer -= 1
+
+            # rainbow flash overlay
+            flash_color = (
+                random.randint(50, 255),
+                random.randint(50, 255),
+                random.randint(50, 255),
             )
 
+            overlay = frame.copy()
+            overlay[:] = flash_color
+
+            alpha = 0.25 + 0.15 * np.sin(celebration_timer)
+            frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
+
+            # update confetti
+            new_confetti = []
+
+            for p in confetti:
+
+                p[0] += p[2]
+                p[1] += p[3]
+
+                p[3] += 1  # gravity
+
+                if p[1] < h + 50:
+
+                    cv2.circle(frame, (int(p[0]), int(p[1])), 4, p[4], -1)
+
+                    new_confetti.append(p)
+
+            confetti = new_confetti
+
+            # screen shake
+            shake_x = random.randint(-10, 10)
+            shake_y = random.randint(-10, 10)
+
+            M = np.float32([[1, 0, shake_x], [0, 1, shake_y]])
+
+            frame = cv2.warpAffine(frame, M, (w, h), borderMode=cv2.BORDER_REFLECT)
+
+            # gigantic glowing success text
+            text = f"{completed_word}!"
+
+            size = 2.5 + 0.5 * np.sin(celebration_timer)
+
+            cv2.putText(
+                frame,
+                text,
+                (40, h // 2),
+                cv2.FONT_HERSHEY_DUPLEX,
+                size,
+                (255, 255, 255),
+                12,
+            )
+
+            cv2.putText(
+                frame,
+                "LEGENDARY!",
+                (60, h // 2 + 80),
+                cv2.FONT_HERSHEY_DUPLEX,
+                1.5,
+                (0, 255, 255),
+                4,
+            )
+
+            cv2.putText(
+                frame,
+                text,
+                (40, h // 2),
+                cv2.FONT_HERSHEY_DUPLEX,
+                size,
+                (
+                    random.randint(0, 255),
+                    random.randint(0, 255),
+                    random.randint(0, 255),
+                ),
+                4,
+            )
+
+        if letter_feedback_timer > 0:
+
+            letter_feedback_timer -= 1
+
+            scale = 1.6 + 0.15 * letter_feedback_timer
+
+            text = "Good!"
+
+            text_size = cv2.getTextSize(
+                text,
+                cv2.FONT_HERSHEY_DUPLEX,
+                scale,
+                6
+            )[0]
+
+            x = (w - text_size[0]) // 2
+            y = (h + text_size[1]) // 2
+
+            # glow
+            cv2.putText(
+                frame,
+                text,
+                (x, y),
+                cv2.FONT_HERSHEY_DUPLEX,
+                scale,
+                (255, 255, 255),
+                12,
+            )
+
+            # green foreground
+            cv2.putText(
+                frame,
+                text,
+                (x, y),
+                cv2.FONT_HERSHEY_DUPLEX,
+                scale,
+                (0, 255, 0),
+                4,
+            )
         cv2.imshow("Sign Language Recognition", frame)
 
         if cv2.waitKey(1) & 0xFF == 27:
