@@ -234,6 +234,12 @@ with HandLandmarker.create_from_options(options) as landmarker:
     for _ in range(10):
         cap.read()
 
+    cv2.namedWindow("Sign Language Recognition", cv2.WINDOW_NORMAL)
+
+    cv2.setWindowProperty(
+        "Sign Language Recognition", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN
+    )
+
     while cap.isOpened():
 
         ret, frame = cap.read()
@@ -369,11 +375,11 @@ with HandLandmarker.create_from_options(options) as landmarker:
         for i, letter in enumerate(target_word):
 
             if i == last_completed_index and gold_flash_timer > 0:
-                color = (0, 215, 255)   # gold
+                color = (0, 215, 255)  # gold
                 display = letter
 
             elif i < letter_index:
-                color = (0, 255, 0)     # green
+                color = (0, 255, 0)  # green
                 display = letter
 
             elif i == letter_index:
@@ -542,12 +548,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
             text = "Good!"
 
-            text_size = cv2.getTextSize(
-                text,
-                cv2.FONT_HERSHEY_DUPLEX,
-                scale,
-                6
-            )[0]
+            text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_DUPLEX, scale, 6)[0]
 
             x = (w - text_size[0]) // 2
             y = (h + text_size[1]) // 2
@@ -573,6 +574,8 @@ with HandLandmarker.create_from_options(options) as landmarker:
                 (0, 255, 0),
                 4,
             )
+        frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_LINEAR)
+
         cv2.imshow("Sign Language Recognition", frame)
 
         if cv2.waitKey(1) & 0xFF == 27:
