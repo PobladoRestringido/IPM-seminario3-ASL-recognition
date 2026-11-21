@@ -3,6 +3,7 @@ from vision import (
     classify_hand,
     normalize_landmarks,
     create_landmarker,
+    initialize_camera,
 )
 from game import pick_word
 from ui import (
@@ -23,6 +24,8 @@ import random
 import cv2
 import mediapipe as mp
 import numpy as np
+
+WINDOW_NAME = "Sign Language Spelling Game"
 
 # ============================================================
 # Load reference signs
@@ -109,38 +112,7 @@ for letter in available_letters:
 
 with create_landmarker() as landmarker:
 
-    # --------------------------------------------------------
-    # WSL-friendly camera setup from your working project
-    # --------------------------------------------------------
-
-    cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
-
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc("M", "J", "P", "G"))
-
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-    fps = cap.get(cv2.CAP_PROP_FPS)
-
-    if fps == 0:
-        fps = 30
-
-    frame_ms = int(1000 / fps)
-
-    timestamp = 0
-
-    # Camera warmup
-    for _ in range(10):
-        cap.read()
-
-    cv2.namedWindow("Sign Language Recognition", cv2.WINDOW_NORMAL)
-
-    cv2.setWindowProperty(
-        "Sign Language Recognition", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN
-    )
+    cap, frame_ms, timestamp = initialize_camera(window_name=WINDOW_NAME)
 
     while cap.isOpened():
 
@@ -335,7 +307,7 @@ with create_landmarker() as landmarker:
             )
         frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_LINEAR)
 
-        cv2.imshow("Sign Language Recognition", frame)
+        cv2.imshow(WINDOW_NAME, frame)
 
         if cv2.waitKey(1) & 0xFF == 27:
             sys.exit(0)
