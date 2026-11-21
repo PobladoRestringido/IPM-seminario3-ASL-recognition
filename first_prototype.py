@@ -4,8 +4,17 @@ from vision import (
     normalize_landmarks,
     create_landmarker,
 )
-
 from game import pick_word
+from ui import (
+    draw_title,
+    draw_metrics,
+    draw_feedback,
+    draw_word_progress,
+    draw_hand_guide,
+    spawn_confetti,
+    draw_word_complete_celebration,
+    draw_letter_success,
+)
 
 import sys
 from pathlib import Path
@@ -14,11 +23,6 @@ import random
 import cv2
 import mediapipe as mp
 import numpy as np
-
-# ============================================================
-# Landmark normalization
-# ============================================================
-
 
 # ============================================================
 # Load reference signs
@@ -58,11 +62,6 @@ def load_reference_signs(folder="output/landmarks"):
             print(f"Could not load {file.name}: {e}")
 
     return references
-
-
-# ============================================================
-# Classification
-# ============================================================
 
 
 # ============================================================
@@ -232,20 +231,11 @@ with create_landmarker() as landmarker:
                     completed_word = target_word
                     celebration_timer = 45  # ~1.5 seconds
 
-                    for _ in range(250):
-                        confetti.append(
-                            [
-                                random.randint(0, w),
-                                random.randint(0, h),
-                                random.randint(-15, 15),
-                                random.randint(-25, -5),
-                                (
-                                    random.randint(0, 255),
-                                    random.randint(0, 255),
-                                    random.randint(0, 255),
-                                ),
-                            ]
-                        )
+                    confetti = spawn_confetti(
+                        w,
+                        h,
+                        count=250,
+                    )
 
                     print(f"Word complete: {target_word}")
 
@@ -261,186 +251,52 @@ with create_landmarker() as landmarker:
         if gold_flash_timer > 0:
             gold_flash_timer -= 1
 
-        cv2.putText(
+        draw_title(frame)
+
+        draw_word_progress(
             frame,
-            "Sign Language Prototype",
-            (10, 35),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (255, 255, 255),
-            2,
+            target_word,
+            letter_index,
+            last_completed_index,
+            gold_flash_timer,
         )
 
-        # Show the whole word with the current letter highlighted in brackets
-        x = 10
-        y = 80
-
-        for i, letter in enumerate(target_word):
-
-            if i == last_completed_index and gold_flash_timer > 0:
-                color = (0, 215, 255)  # gold
-                display = letter
-
-            elif i < letter_index:
-                color = (0, 255, 0)  # green
-                display = letter
-
-            elif i == letter_index:
-                color = (0, 165, 255)  # current = orange
-                display = f"[{letter}]"
-
-            else:
-                color = (180, 180, 180)  # future = grey
-                display = letter
-
-            cv2.putText(
-                frame,
-                display,
-                (x, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1.0,
-                color,
-                2,
-            )
-
-            text_size = cv2.getTextSize(display, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)[0]
-
-            x += text_size[0] + 5
-
-        feedback = "Correct!" if is_correct else f"You are showing: {prediction}"
-
-        feedback_color = (0, 255, 0) if is_correct else (0, 0, 255)
-
-        cv2.putText(
-            frame, feedback, (10, 125), cv2.FONT_HERSHEY_SIMPLEX, 0.9, feedback_color, 2
-        )
-
-        cv2.putText(
+        draw_feedback(
             frame,
-            f"Similarity: {similarity}%",
-            (10, 170),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.9,
-            (0, 255, 255),
-            2,
+            prediction,
+            is_correct,
         )
 
-        cv2.putText(
+        draw_metrics(
             frame,
-            f"Distance: {distance:.3f}",
-            (10, 210),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (255, 255, 0),
-            2,
+            similarity,
+            distance,
         )
 
-        guide = guide_images.get(target_letter)
-
-        if guide is not None:
-
-            guide_height = 180
-
-            aspect_ratio = guide.shape[1] / guide.shape[0]
-
-            guide_width = int(guide_height * aspect_ratio)
-
-            guide_resized = cv2.resize(guide, (guide_width, guide_height))
-
-            y1 = 10
-            y2 = y1 + guide_height
-
-            x2 = w - 10
-            x1 = x2 - guide_width
-
-            frame[y1:y2, x1:x2] = guide_resized
-
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
-
-        # =====================================================
-        # EXTREME SUCCESS CELEBRATION
-        # =====================================================
+        draw_hand_guide(
+            frame,
+            guide_images,
+            target_letter,
+        )
 
         if celebration_timer > 0:
 
             celebration_timer -= 1
 
-            # rainbow flash overlay
-            flash_color = (
-                random.randint(50, 255),
-                random.randint(50, 255),
-                random.randint(50, 255),
+            frame, confetti = draw_word_complete_celebration(
+                frame,
+                confetti,
+                completed_word,
+                celebration_timer,
             )
 
-            overlay = frame.copy()
-            overlay[:] = flash_color
+        if letter_feedback_timer > 0:
 
-            alpha = 0.25 + 0.15 * np.sin(celebration_timer)
-            frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
+            letter_feedback_timer -= 1
 
-            # update confetti
-            new_confetti = []
-
-            for p in confetti:
-
-                p[0] += p[2]
-                p[1] += p[3]
-
-                p[3] += 1  # gravity
-
-                if p[1] < h + 50:
-
-                    cv2.circle(frame, (int(p[0]), int(p[1])), 4, p[4], -1)
-
-                    new_confetti.append(p)
-
-            confetti = new_confetti
-
-            # screen shake
-            shake_x = random.randint(-10, 10)
-            shake_y = random.randint(-10, 10)
-
-            M = np.float32([[1, 0, shake_x], [0, 1, shake_y]])
-
-            frame = cv2.warpAffine(frame, M, (w, h), borderMode=cv2.BORDER_REFLECT)
-
-            # gigantic glowing success text
-            text = f"{completed_word}!"
-
-            size = 2.5 + 0.5 * np.sin(celebration_timer)
-
-            cv2.putText(
+            draw_letter_success(
                 frame,
-                text,
-                (40, h // 2),
-                cv2.FONT_HERSHEY_DUPLEX,
-                size,
-                (255, 255, 255),
-                12,
-            )
-
-            cv2.putText(
-                frame,
-                "LEGENDARY!",
-                (60, h // 2 + 80),
-                cv2.FONT_HERSHEY_DUPLEX,
-                1.5,
-                (0, 255, 255),
-                4,
-            )
-
-            cv2.putText(
-                frame,
-                text,
-                (40, h // 2),
-                cv2.FONT_HERSHEY_DUPLEX,
-                size,
-                (
-                    random.randint(0, 255),
-                    random.randint(0, 255),
-                    random.randint(0, 255),
-                ),
-                4,
+                letter_feedback_timer,
             )
 
         if letter_feedback_timer > 0:
